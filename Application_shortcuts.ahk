@@ -4,11 +4,19 @@
 
 global Windows := Array()
 
-GetDesktopHwnd() {
-    static IID_IVirtualDesktopManager := "{A5CD92FF-29BE-454C-8D04-D82879FB3F1B}"
+global DesktopHwnds := Array()
+Desktop := WinGetList("ahk_exe explorer.exe")
+Desktop_id := ""
 
-    desktopManager := ComObject("Shell.Application", IID_IVirtualDesktopManager)
-    return desktopManager.GetCurrentDesktop()
+for Id in Desktop {
+    Check := WinGetStyle(Id)
+    if (Check = 0x96000000) {
+        Check := WinGetTitle(Id)
+        if (Check = "") {
+            DesktopHwnds.Push(Id)
+            MsgBox "Desktop HWND: " Id
+        }
+    }
 }
 
 ; --------- Opening/Quiting Applications ---------
@@ -36,9 +44,8 @@ class WinClass {
     desktopHwnd := 0
 
     ; defining: hwnd, actualW, actualH, x, y, w, h, borderW, borderH
-    __New(hwnd, desktopHwnd) {
+    __New(hwnd) {
         this.hwnd := hwnd
-        this.desktopHwnd := desktopHwnd
 
         WinGetClientPos(, , &actualW, &actualH, this.hwnd)
         this.actualW := actualW
@@ -133,8 +140,7 @@ CheckWindows() { ; Checks if every window is registered
         winInfo := WinGetStyle(hwnd)
         win := GetWindowObj(hwnd)
         if Type(win) = "Integer" and winInfo & 0x10000000 { ; If the window is not registered and visible
-            desktopHwnd := GetDesktopHwnd()
-            win := WinClass(hwnd, desktopHwnd)
+            win := WinClass(hwnd)
             Windows.Push(win)
         }
     }
@@ -160,8 +166,7 @@ OpenApplication(application, path) {
         Run path, , , &pid ; Start Application
         WinWait "ahk_pid " pid, , 1
         hwnd := WinGetID(application)
-        desktopHwnd := GetDesktopHwnd()
-        win := WinClass(hwnd, desktopHwnd)
+        win := WinClass(hwnd)
         Windows.Push(win)
         WinRestore hwnd
     } else {

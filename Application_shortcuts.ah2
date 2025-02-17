@@ -1,23 +1,11 @@
 ﻿#Requires AutoHotkey 2.0+    ; Needs v2
 #SingleInstance Force        ; Run only one instance
-#MaxThreadsPerHotkey 2
 
 global Windows := Array()
 
 global DesktopHwnds := Array()
 Desktop := WinGetList("ahk_exe explorer.exe")
 Desktop_id := ""
-
-for Id in Desktop {
-    Check := WinGetStyle(Id)
-    if (Check = 0x96000000) {
-        Check := WinGetTitle(Id)
-        if (Check = "") {
-            DesktopHwnds.Push(Id)
-            MsgBox "Desktop HWND: " Id
-        }
-    }
-}
 
 ; --------- Opening/Quiting Applications ---------
 
@@ -94,7 +82,10 @@ class WinClass {
 
         ; Create an array of windows with the same application and desktop
         for win in Windows {
-            if win.application = this.application and win.desktopHwnd = this.desktopHwnd {
+            ; DllCall("VirtualDesktopAccessor.dll\IsWindowOnCurrentVirtualDesktop", "Ptr", win.hwnd)
+            MsgBox dllHandle := DllCall("LoadLibrary", "Str", "C:\Users\adhos\OneDrive\Dokumente\GitHub\shortcuts\VirtualDesktopAccessor.dll", "Ptr")
+
+            if win.application = this.application {
                 appWindows.Push(win.hwnd)
             }
         }

@@ -13,7 +13,6 @@ class WinClass {
 
     hwnd := 0
     application := "ahk_exe "
-    path := ""
     actualW := 0
     actualH := 0
     borderW := 0
@@ -78,16 +77,17 @@ class WinClass {
     }
 
     Activate() {
-        appWindows := []
+        appWindows := Array()
 
         ; Create an array of windows with the same application and desktop
         for win in Windows {
-            ; DllCall("VirtualDesktopAccessor.dll\IsWindowOnCurrentVirtualDesktop", "Ptr", win.hwnd)
-            MsgBox dllHandle := DllCall("LoadLibrary", "Str", "C:\Users\adhos\OneDrive\Dokumente\GitHub\shortcuts\VirtualDesktopAccessor.dll", "Ptr")
-
-            if win.application = this.application {
+            if win.application = this.application and DllCall("VirtualDesktopAccessor.dll\IsWindowOnCurrentVirtualDesktop", "Ptr", win.hwnd) {
                 appWindows.Push(win.hwnd)
             }
+        }
+
+        if this.lastActivatedIndex > appWindows.Length {
+            this.lastActivatedIndex := appWindows.Length
         }
 
         ; Activate the next window in the cycle
@@ -126,6 +126,15 @@ class WinClass {
 ; --------- Opening/Quiting Applications ---------
 
 CheckWindows() { ; Checks if every window is registered
+
+    ; If any window is closed, remove it from the list automatically
+    for window in Windows {
+        if WinExist("ahk_id " window.hwnd) = 0 {
+            Windows.RemoveAt A_Index
+            window := "" ; losing the reference to object
+        }
+    }
+
     hwnds := WinGetList()
     for hwnd in hwnds {
         winInfo := WinGetStyle(hwnd)
@@ -137,7 +146,7 @@ CheckWindows() { ; Checks if every window is registered
     }
 }
 
-SetTimer CheckWindows, 1000
+; SetTimer CheckWindows, 1000
 
 ^<^>!C:: OpenApplication "ahk_exe chrome.exe", "C:\Program Files (x86)\Chromium\chrome-win\chrome.exe"
 ^<^>!O:: OpenApplication "ahk_exe opera.exe", "C:\Users\adhos\AppData\Local\Programs\Opera\opera.exe"
@@ -158,11 +167,14 @@ OpenApplication(application, path) {
         WinWait "ahk_pid " pid, , 1
         hwnd := WinGetID(application)
         win := WinClass(hwnd)
+        win.Maximize()
         Windows.Push(win)
         WinRestore hwnd
     } else {
         win := GetWindowObj(hwnd)
-        win.Activate() ; Activate the window
+        if Type(win) != "Integer" {
+            win.Activate()
+        }
     }
 }
 
@@ -171,11 +183,15 @@ OpenApplication(application, path) {
     hwnd := WinGetID("A") ; Get the active window's HWND
 
     win := GetWindowObj(hwnd)
-    win := "" ; losing the reference to object
-
     WinClose hwnd
-    if Windows.Has(hwnd) {
-        Windows.Delete hwnd ; Remove stored values
+
+    for window in Windows {
+        if window.hwnd = hwnd {
+            Windows.RemoveAt A_Index
+            window := "" ; losing the reference to object
+            MsgBox hwnd " " Windows[A_Index].hwnd
+            break
+        }
     }
 }
 
@@ -183,9 +199,9 @@ OpenApplication(application, path) {
 
 GetWindowObj(hwnd) {
 
-    for win in Windows {
-        if win.hwnd == hwnd {
-            return win
+    for w in Windows {
+        if w.hwnd = hwnd {
+            return w
         }
     }
     return 0
@@ -201,7 +217,6 @@ GetWindowObj(hwnd) {
 ^Right:: { ; Ctrl + Right moves window to the right half
     hwnd := WinExist("A")
     win := GetWindowObj(hwnd)
-    MsgBox win.application
     if Type(win) != "Integer" {
         win.Move("Right") 
     }
@@ -224,14 +239,7 @@ GetWindowObj(hwnd) {
 }
 
 ^+N:: {
-    for hwnd in WinGetList() {
-        title := WinGetTitle(hwnd)
-        className := WinGetClass(hwnd)
-        
-        if className = "WorkerW" {
-            MsgBox "Found Desktop Wallpaper HWND: " hwnd "`nClass: " className "`nTitle: " title
-        }
-    }
+    CheckWindows()
 }
 
 ^+$:: ; Removing Taskbar (copied from internet: https://www.autohotkey.com/boards/viewtopic.php?t=113325)

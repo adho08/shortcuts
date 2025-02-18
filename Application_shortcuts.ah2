@@ -1,38 +1,16 @@
 ﻿#Requires AutoHotkey 2.0+    ; Needs v2
 #SingleInstance Force        ; Run only one instance
 
-global Windows := Array()
-
-global DesktopHwnds := Array()
-Desktop := WinGetList("ahk_exe explorer.exe")
-Desktop_id := ""
+global Windows := Array() ; Array of all windows
 
 ; --------- Opening/Quiting Applications ---------
 
 class WinClass {
 
-    hwnd := 0
-    application := "ahk_exe "
-    actualW := 0
-    actualH := 0
-    borderW := 0
-    borderH := 0
-    x := 0
-    y := 0
-    w := 0
-    h := 0
-    state := 'n'
-    prevX := 0
-    prevY := 0
-    prevW := 0
-    prevH := 0
-    prevState := 'n'
-    lastActivatedIndex := 0
-    desktopHwnd := 0
-
     ; defining: hwnd, actualW, actualH, x, y, w, h, borderW, borderH
     __New(hwnd) {
         this.hwnd := hwnd
+        this.state := 'n'
 
         WinGetClientPos(, , &actualW, &actualH, this.hwnd)
         this.actualW := actualW
@@ -41,9 +19,20 @@ class WinClass {
         this.UpdatePos()
 
         this.borderW := this.w - this.actualW
-        this.borderH := this.h- this.actualH
+        this.borderH := this.h - this.actualH
 
-        this.application := WinGetProcessName(this.hwnd)
+        this.pid := WinGetPID(hwnd)
+        this.application := "ahk_exe " WinGetProcessName(this.hwnd)
+
+        ; If the window is a UWP app, get the child hwnd
+        if StrCompare(this.application, "ahk_exe ApplicationFrameHost.exe") = 0 {
+            for child in ComObjGet("winmgmts:").ExecQuery("Select * from Win32_Process Where ParentProcessId=" this.pid) {
+                if StrCompare(child.Name, "RuntimeBroker.exe") != 0 {
+                    this.application := child.Name
+                }
+            }
+        }
+            
         this.path := WinGetProcessPath(this.hwnd)
     }
 
@@ -58,7 +47,7 @@ class WinClass {
 
     Move(side) { ; Move window to left or right side
 
-        ; Save the previous position
+        ; Save previous data
         this.prevX := this.x
         this.prevY := this.y
         this.prevW := this.w
@@ -77,24 +66,7 @@ class WinClass {
     }
 
     Activate() {
-        appWindows := Array()
-
-        ; Create an array of windows with the same application and desktop
-        for win in Windows {
-            if win.application = this.application and DllCall("VirtualDesktopAccessor.dll\IsWindowOnCurrentVirtualDesktop", "Ptr", win.hwnd) {
-                appWindows.Push(win.hwnd)
-            }
-        }
-
-        if this.lastActivatedIndex > appWindows.Length {
-            this.lastActivatedIndex := appWindows.Length
-        }
-
-        ; Activate the next window in the cycle
-        if appWindows.Length > 0 {
-            this.lastActivatedIndex := Mod((this.lastActivatedIndex), appWindows.Length) + 1
-            WinActivate appWindows[this.lastActivatedIndex]
-        }
+        WinActivate this.hwnd
     }
 
     Quit() {
@@ -108,10 +80,10 @@ class WinClass {
             this.prevW := this.w
             this.prevH := this.h
             this.prevState := this.state
-
-            WinMove -this.borderW/2, -this.borderH/2, A_ScreenWidth + this.borderW, A_ScreenHeight + this.borderH, this.hwnd
-
-            this.state := 'm'
+            try { ; Some windows cannot be moved or resized by this command
+                WinMove -this.borderW/2, -this.borderH/2, A_ScreenWidth + this.borderW, A_ScreenHeight + this.borderH, this.hwnd
+                this.state := 'm'
+            }
         } else {
             WinMove this.prevX, this.prevY, this.prevW, this.prevH, this.hwnd
             this.UpdatePos(this.prevState)
@@ -119,7 +91,7 @@ class WinClass {
     }
 
     PrintData() { ; debugging
-        MsgBox "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h ", State: " this.state ", hwnd: " this.hwnd ", desktop hwnd: " this.desktopHwnd ", application: " this.application
+        MsgBox "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h ", State: " this.state ", hwnd: " this.hwnd ", application: " this.application
     }
 }
 
@@ -146,9 +118,10 @@ CheckWindows() { ; Checks if every window is registered
     }
 }
 
-; SetTimer CheckWindows, 1000
+SetTimer CheckWindows, 250
 
 ^<^>!C:: OpenApplication "ahk_exe chrome.exe", "C:\Program Files (x86)\Chromium\chrome-win\chrome.exe"
+^<^>!G:: OpenApplication "ahk_exe GitHubDesktop.exe", "C:\Users\adhos\AppData\Local\GitHubDesktop\GitHubDesktop.exe"
 ^<^>!O:: OpenApplication "ahk_exe opera.exe", "C:\Users\adhos\AppData\Local\Programs\Opera\opera.exe"
 ^<^>!M:: OpenApplication "ahk_exe OUTLOOK.exe", "C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.exe"
 ^<^>!E:: OpenApplication "ahk_exe explorer.exe", "C:\Windows\explorer.exe"
@@ -162,84 +135,115 @@ OpenApplication(application, path) {
 
     hwnd := WinExist(application)
 
+    MsgBox hwnd
+
     if hwnd = 0 {
-        Run path, , , &pid ; Start Application
-        WinWait "ahk_pid " pid, , 1
-        hwnd := WinGetID(application)
-        win := WinClass(hwnd)
-        win.Maximize()
-        Windows.Push(win)
-        WinRestore hwnd
+        CreateWindow(path)
     } else {
-        win := GetWindowObj(hwnd)
-        if Type(win) != "Integer" {
-            win.Activate()
-        }
+        CycleWindows(application)
     }
 }
 
-^Q:: ; Quiting the Window
+CreateWindow(path) {
+    Run path, , 'Min' ; Start Application
+}
+
+^Q:: ; Quiting the window
 {
-    hwnd := WinGetID("A") ; Get the active window's HWND
-
-    win := GetWindowObj(hwnd)
-    WinClose hwnd
-
-    for window in Windows {
-        if window.hwnd = hwnd {
-            Windows.RemoveAt A_Index
-            window := "" ; losing the reference to object
-            MsgBox hwnd " " Windows[A_Index].hwnd
-            break
-        }
-    }
+    WinClose "A"
 }
 
 ; --------- Window Manager ---------
 
 GetWindowObj(hwnd) {
 
-    for w in Windows {
-        if w.hwnd = hwnd {
-            return w
+    for win in Windows {
+        if win.hwnd = hwnd {
+            return win
         }
     }
     return 0
 }
 
+global successive := 1
+global lastActivatedApp := ""
+
+CycleWindows(application) {
+
+    global successive, lastActivatedApp
+
+    appWindows := Array()
+
+        ; Create an array of windows with the same application and desktop
+        for win in Windows {
+            if StrCompare(win.application, application) = 0 and DllCall("VirtualDesktopAccessor.dll\IsWindowOnCurrentVirtualDesktop", "Ptr", win.hwnd) {
+                appWindows.Push(win)
+            }
+        }
+
+        ; Activate the next window in the cycle
+        ; If the same application is activated as before, move to the next window in the list
+        if StrCompare(application, lastActivatedApp) = 0 {
+            successive := Mod(successive, appWindows.Length) + 1
+        } else {
+        ; If a different application is activated, start from the first window
+            successive := 1
+        }
+        appWindows[successive].Activate()
+
+        lastActivatedApp := application
+}
+
 ^Left:: { ; Ctrl + Left moves window to the left half
-    hwnd := WinExist("A")
+    hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    if Type(win) != "Integer" {
+    try {
         win.Move("Left")
     }
 }
 ^Right:: { ; Ctrl + Right moves window to the right half
-    hwnd := WinExist("A")
+    hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    if Type(win) != "Integer" {
+    try {
         win.Move("Right") 
     }
 }
 
 ^M:: { ; Ctrl + M maximizes the window
-    hwnd := WinExist("A")
+    hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    if Type(win) != "Integer" {
+    try {
         win.Maximize()
     }
+}
+
+^N:: {
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    MsgBox win.application "`n" win.path
+    CreateWindow(win.path)
 }
 
 ^+Y:: {
     hwnd := WinExist("A")
     win := GetWindowObj(hwnd)
-    if win != "Integer" {
+    try {
         win.PrintData()
     }
 }
 
-^+N:: {
-    CheckWindows()
+; Get true applications of windows which are hosted by ApplicationFrameHost.exe (copied from internet: https://www.reddit.com/r/AutoHotkey/comments/1dsecxe/targeting_netflix_desktop_app_doesnt_work_when_it/)
+GetUWPWindow(WinTitle) {
+    hwnd := 0
+    loop {
+        hwnd := DllCall("FindWindowEx", "ptr", 0, "ptr", hwnd, "str", "ApplicationFrameWindow", "ptr", 0)
+        if WinExist(hwnd) {
+            child := DllCall("FindWindowEx", "ptr", hwnd, "ptr", 0, "str", "Windows.UI.Core.CoreWindow", "ptr", 0)
+            if WinExist(WinTitle " ahk_id" child)
+                return child
+        }
+    } until !hwnd
+    return 0
 }
 
 ^+$:: ; Removing Taskbar (copied from internet: https://www.autohotkey.com/boards/viewtopic.php?t=113325)

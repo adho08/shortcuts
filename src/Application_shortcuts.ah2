@@ -1,7 +1,7 @@
 ﻿#Requires AutoHotkey 2.0+    ; Needs v2
 #SingleInstance Force        ; Run only one instance
 
-global Windows := Array() ; Array of all windows
+global AllWindows := Array() ; Array of all windows
 
 ; --------- Opening/Quiting Applications ---------
 
@@ -25,12 +25,8 @@ class WinClass {
         this.application := "ahk_exe " WinGetProcessName(this.hwnd)
 
         ; If the window is a UWP app, get the child hwnd
-        if StrCompare(this.application, "ahk_exe ApplicationFrameHost.exe") = 0 {
-            for child in ComObjGet("winmgmts:").ExecQuery("Select * from Win32_Process Where ParentProcessId=" this.pid) {
-                if StrCompare(child.Name, "RuntimeBroker.exe") != 0 {
-                    this.application := child.Name
-                }
-            }
+        if WinGetProcessName(hwnd) = "ApplicationFrameHost.exe" {
+            this.application := "UWP"
         }
             
         this.path := WinGetProcessPath(this.hwnd)
@@ -97,12 +93,12 @@ class WinClass {
 
 ; --------- Opening/Quiting Applications ---------
 
-CheckWindows() { ; Checks if every window is registered
+CheckAllWindows() { ; Checks if every window is registered
 
     ; If any window is closed, remove it from the list automatically
-    for window in Windows {
+    for window in AllWindows {
         if WinExist("ahk_id " window.hwnd) = 0 {
-            Windows.RemoveAt A_Index
+            AllWindows.RemoveAt A_Index
             window := "" ; losing the reference to object
         }
     }
@@ -113,12 +109,12 @@ CheckWindows() { ; Checks if every window is registered
         win := GetWindowObj(hwnd)
         if Type(win) = "Integer" and winInfo & 0x10000000 { ; If the window is not registered and visible
             win := WinClass(hwnd)
-            Windows.Push(win)
+            AllWindows.Push(win)
         }
     }
 }
 
-SetTimer CheckWindows, 250
+SetTimer CheckAllWindows, 250
 
 ^<^>!C:: OpenApplication "ahk_exe chrome.exe", "C:\Program Files (x86)\Chromium\chrome-win\chrome.exe"
 ^<^>!G:: OpenApplication "ahk_exe GitHubDesktop.exe", "C:\Users\adhos\AppData\Local\GitHubDesktop\GitHubDesktop.exe"
@@ -135,12 +131,10 @@ OpenApplication(application, path) {
 
     hwnd := WinExist(application)
 
-    MsgBox hwnd
-
     if hwnd = 0 {
         CreateWindow(path)
     } else {
-        CycleWindows(application)
+        CycleAllWindows(application)
     }
 }
 
@@ -157,7 +151,7 @@ CreateWindow(path) {
 
 GetWindowObj(hwnd) {
 
-    for win in Windows {
+    for win in AllWindows {
         if win.hwnd = hwnd {
             return win
         }
@@ -168,15 +162,15 @@ GetWindowObj(hwnd) {
 global successive := 1
 global lastActivatedApp := ""
 
-CycleWindows(application) {
+CycleAllWindows(application) {
 
     global successive, lastActivatedApp
 
     appWindows := Array()
 
         ; Create an array of windows with the same application and desktop
-        for win in Windows {
-            if StrCompare(win.application, application) = 0 and DllCall("VirtualDesktopAccessor.dll\IsWindowOnCurrentVirtualDesktop", "Ptr", win.hwnd) {
+        for win in AllWindows {
+            if StrCompare(win.application, application) = 0 and DllCall("bin\VirtualDesktopAccessor.dll\IsWindowOnCurrentVirtualDesktop", "Ptr", win.hwnd) {
                 appWindows.Push(win)
             }
         }
@@ -220,7 +214,6 @@ CycleWindows(application) {
 ^N:: {
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    MsgBox win.application "`n" win.path
     CreateWindow(win.path)
 }
 
@@ -232,18 +225,54 @@ CycleWindows(application) {
     }
 }
 
-; Get true applications of windows which are hosted by ApplicationFrameHost.exe (copied from internet: https://www.reddit.com/r/AutoHotkey/comments/1dsecxe/targeting_netflix_desktop_app_doesnt_work_when_it/)
-GetUWPWindow(WinTitle) {
-    hwnd := 0
-    loop {
-        hwnd := DllCall("FindWindowEx", "ptr", 0, "ptr", hwnd, "str", "ApplicationFrameWindow", "ptr", 0)
-        if WinExist(hwnd) {
-            child := DllCall("FindWindowEx", "ptr", hwnd, "ptr", 0, "str", "Windows.UI.Core.CoreWindow", "ptr", 0)
-            if WinExist(WinTitle " ahk_id" child)
-                return child
+; --------- Made by Ai (Copilot, Blackbox, ChatGPT, Claude) ---------
+
+GetPackageFullNameForUWP(hwnd) {
+    ; Get window process ID
+    winProcessId := 0
+    DllCall("GetWindowThreadProcessId", "Ptr", hwnd, "UInt*", &winProcessId)
+    
+    ; Open process with PROCESS_QUERY_LIMITED_INFORMATION access rights
+    hProcess := DllCall("OpenProcess", "UInt", 0x1000, "Int", 0, "UInt", winProcessId, "Ptr")
+    
+    if (!hProcess) {
+        MsgBox("Failed to open process. Error: " A_LastError)
+        return "Error: Could not open process"
+    }
+    
+    ; Get the package full name
+    length := 0
+    result := DllCall("GetPackageFullName", "Ptr", hProcess, "UInt*", &length, "Ptr", 0)
+    
+    if (result = 15700) { ; APPMODEL_ERROR_NO_PACKAGE
+        MsgBox("The process is not a UWP application.")
+        DllCall("CloseHandle", "Ptr", hProcess)
+        return "Error: The process is not a UWP application"
+    }
+    
+    if (result != 0) {
+        MsgBox("GetPackageFullName failed. Error: " result)
+        DllCall("CloseHandle", "Ptr", hProcess)
+        return "Error: GetPackageFullName failed"
+    }
+    
+    if (length > 0) {
+        packageName := Buffer(length * 2)
+        result := DllCall("GetPackageFullName", "Ptr", hProcess, "UInt*", &length, "Ptr", packageName)
+        
+        DllCall("CloseHandle", "Ptr", hProcess)
+        
+        if (result == 0) {
+            returnVal := StrGet(packageName)
+            MsgBox("Retrieved Package Full Name: '" returnVal "'")
+            return returnVal
+        } else {
+            return "Error in second call: " result
         }
-    } until !hwnd
-    return 0
+    } else {
+        DllCall("CloseHandle", "Ptr", hProcess)
+        return "Error: No Package Full Name available"
+    }
 }
 
 ^+$:: ; Removing Taskbar (copied from internet: https://www.autohotkey.com/boards/viewtopic.php?t=113325)

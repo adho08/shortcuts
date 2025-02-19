@@ -26,6 +26,7 @@ class WinClass {
 
         ; If the window is a UWP app, get the child hwnd
         if WinGetProcessName(hwnd) = "ApplicationFrameHost.exe" {
+            MsgBox("UWP")
             this.application := "UWP"
         }
             
@@ -225,55 +226,34 @@ CycleAllWindows(application) {
     }
 }
 
+^+N:: {
+    hwnd := WinGetID("A")
+
+    command := Format('powershell.exe -ExecutionPolicy Bypass -File "{1}\getAumid.ps1" -hwnd {2}', A_ScriptDir, hwnd)
+
+    output := RunCMDCommand(command)
+    MsgBox(output)
+}
+
+
+RunCMDCommand(command) {
+    ; Create hidden CMD process
+    cmdHidden := ComObject("WScript.Shell")
+    
+    ; Execute command and capture output
+    exec := cmdHidden.Exec(A_ComSpec " /c " command)
+    
+    ; Wait for command to complete
+    while !exec.Status
+        Sleep(100)
+    
+    ; Get output and return it
+    return exec.StdOut.ReadAll()
+}
+
 ; --------- Made by Ai (Copilot, Blackbox, ChatGPT, Claude) ---------
 
-GetPackageFullNameForUWP(hwnd) {
-    ; Get window process ID
-    winProcessId := 0
-    DllCall("GetWindowThreadProcessId", "Ptr", hwnd, "UInt*", &winProcessId)
-    
-    ; Open process with PROCESS_QUERY_LIMITED_INFORMATION access rights
-    hProcess := DllCall("OpenProcess", "UInt", 0x1000, "Int", 0, "UInt", winProcessId, "Ptr")
-    
-    if (!hProcess) {
-        MsgBox("Failed to open process. Error: " A_LastError)
-        return "Error: Could not open process"
-    }
-    
-    ; Get the package full name
-    length := 0
-    result := DllCall("GetPackageFullName", "Ptr", hProcess, "UInt*", &length, "Ptr", 0)
-    
-    if (result = 15700) { ; APPMODEL_ERROR_NO_PACKAGE
-        MsgBox("The process is not a UWP application.")
-        DllCall("CloseHandle", "Ptr", hProcess)
-        return "Error: The process is not a UWP application"
-    }
-    
-    if (result != 0) {
-        MsgBox("GetPackageFullName failed. Error: " result)
-        DllCall("CloseHandle", "Ptr", hProcess)
-        return "Error: GetPackageFullName failed"
-    }
-    
-    if (length > 0) {
-        packageName := Buffer(length * 2)
-        result := DllCall("GetPackageFullName", "Ptr", hProcess, "UInt*", &length, "Ptr", packageName)
-        
-        DllCall("CloseHandle", "Ptr", hProcess)
-        
-        if (result == 0) {
-            returnVal := StrGet(packageName)
-            MsgBox("Retrieved Package Full Name: '" returnVal "'")
-            return returnVal
-        } else {
-            return "Error in second call: " result
-        }
-    } else {
-        DllCall("CloseHandle", "Ptr", hProcess)
-        return "Error: No Package Full Name available"
-    }
-}
+
 
 ^+$:: ; Removing Taskbar (copied from internet: https://www.autohotkey.com/boards/viewtopic.php?t=113325)
 { 

@@ -2,6 +2,7 @@
 #SingleInstance Force        ; Run only one instance
 
 global AllWindows := Array() ; Array of all windows
+global WM_GETMINMAXINFO := 0x0024
 
 ; --------- Opening/Quiting Applications ---------
 
@@ -16,40 +17,44 @@ class WinClass {
         this.actualW := actualW
         this.actualH := actualH
 
-        this.UpdatePos()
-
-        this.borderW := this.w - this.actualW
-        this.borderH := this.h - this.actualH
-
-        this.pid := WinGetPID(hwnd)
-        this.application := "ahk_exe " WinGetProcessName(this.hwnd)
-
-        ; If the window is a UWP app, get the child hwnd
-        if WinGetProcessName(hwnd) = "ApplicationFrameHost.exe" {
-            MsgBox("UWP")
-            this.application := "UWP"
-        }
-            
-        this.path := WinGetProcessPath(this.hwnd)
-    }
-
-    UpdatePos(prevState := this.state) {
         WinGetPos(&x, &y, &w, &h, this.hwnd)
         this.x := x
         this.y := y
         this.w := w
         this.h := h
-        this.state := prevState ; if prevState is empty, set it to state
+
+        this.borderW := this.w - this.actualW
+        this.borderH := this.h - this.actualH
+
+        this.pid := WinGetPID(hwnd)
+
+        this.application := ""
+        try { ; Some windows are hosted by ApplicationFrameHost.exe (E.g. Calculator, OneNote for Windows 10, etc.)
+            this.application := "ahk_exe " WinGetProcessName(this.hwnd)
+        }
+
+        try {
+            this.path := WinGetProcessPath(this.hwnd)
+        }
     }
 
-    Move(side) { ; Move window to left or right side
-
+    Update(prevState := this.state) {
         ; Save previous data
         this.prevX := this.x
         this.prevY := this.y
         this.prevW := this.w
         this.prevH := this.h
-        this.prevState := this.state
+        this.prevState := prevState
+
+        WinGetPos(&x, &y, &w, &h, this.hwnd)
+        ; Update the position
+        this.x := x
+        this.y := y
+        this.w := w
+        this.h := h
+    }
+
+    Move(side) { ; Move window to left or right side
 
         if side = "Left" {
             WinMove -this.borderW//2, -this.borderH//2, A_ScreenWidth//2 + this.borderW, A_ScreenHeight + this.borderH, this.hwnd ; Move to left side
@@ -59,7 +64,7 @@ class WinClass {
             this.state := 'r'
         }
         ; Update the position
-        this.UpdatePos()
+        this.Update()
     }
 
     Activate() {
@@ -72,23 +77,53 @@ class WinClass {
     Maximize() { ; Maximize the window
 
         if this.state != 'm' {
-            this.prevX := this.x
-            this.prevY := this.y
-            this.prevW := this.w
-            this.prevH := this.h
-            this.prevState := this.state
             try { ; Some windows cannot be moved or resized by this command
                 WinMove -this.borderW/2, -this.borderH/2, A_ScreenWidth + this.borderW, A_ScreenHeight + this.borderH, this.hwnd
                 this.state := 'm'
             }
         } else {
             WinMove this.prevX, this.prevY, this.prevW, this.prevH, this.hwnd
-            this.UpdatePos(this.prevState)
         }
+        this.Update(this.prevState)
+    }
+
+    MakeSmallerW(change) {
+        ; change indicates if the window is being made smaller or bigger
+        ; change = negative for smaller, change = positive for bigger, absolute value of sb indicates the change in size
+        minW := SysGet(28) ; Get the minimum width of the window (SM_CXMIN)
+        maxW := SysGet(61) ; Get the maximum width of the window (SM_CXMAX)
+        if (this.w + change < minW) { ; If the next reduction is less than the minimum width, window will not be resized
+            sb := 0
+        }
+
+        changeL := - change/2
+        changeR := change
+
+        if this.x + changeL < 0 { ; if the left side of the window is out of the screen
+            changeL := 0
+        } else if this.x + this.w + changeR > A_ScreenWidth { ; if the right side of the window is out of the screen
+            changeR := 0
+        }
+
+        WinMove this.x + changeL, this.y, this.w + changeR, this.h, this.hwnd
+        this.Update()
+    }
+
+    MakeSmallerH(change) {
+        WinMove this.x, this.y + change / 2, this.w, this.h - change/2, this.hwnd
+        this.Update()
+    }
+
+    MakeBigger() {
+
+    }
+
+    Drive() {
+
     }
 
     PrintData() { ; debugging
-        MsgBox "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h ", State: " this.state ", hwnd: " this.hwnd ", application: " this.application
+        MsgBox "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h ", State: " this.state ", hwnd: " this.hwnd ", application: " this.application ", PID: " this.pid
     }
 }
 
@@ -104,48 +139,68 @@ CheckAllWindows() { ; Checks if every window is registered
         }
     }
 
+    ; Get hwnd of all windows in an array
     hwnds := WinGetList()
+
+    ; Loop through all windows
     for hwnd in hwnds {
         winInfo := WinGetStyle(hwnd)
         win := GetWindowObj(hwnd)
         if Type(win) = "Integer" and winInfo & 0x10000000 { ; If the window is not registered and visible
+
+            ; Make a new WinClass object for the window
             win := WinClass(hwnd)
+            ; Add the window to the list
             AllWindows.Push(win)
+        } else {
+            win.Update()
         }
     }
 }
 
 SetTimer CheckAllWindows, 250
 
-^<^>!C:: OpenApplication "ahk_exe chrome.exe", "C:\Program Files (x86)\Chromium\chrome-win\chrome.exe"
-^<^>!G:: OpenApplication "ahk_exe GitHubDesktop.exe", "C:\Users\adhos\AppData\Local\GitHubDesktop\GitHubDesktop.exe"
-^<^>!O:: OpenApplication "ahk_exe opera.exe", "C:\Users\adhos\AppData\Local\Programs\Opera\opera.exe"
-^<^>!M:: OpenApplication "ahk_exe OUTLOOK.exe", "C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.exe"
-^<^>!E:: OpenApplication "ahk_exe explorer.exe", "C:\Windows\explorer.exe"
-^<^>!V:: OpenApplication "ahk_exe Code.exe", "C:\Users\adhos\AppData\Local\Programs\Microsoft VS Code\Code.exe"
-^<^>!W:: OpenApplication "ahk_exe WhatsApp.exe", "C:\Program Files\WindowsApps\5319275A.WhatsAppDesktop_2.2504.2.0_x64__cv1g1gvanyjgm\WhatsApp.exe"
-^<^>!N:: OpenApplication "ahk_exe onenoteim.exe", "C:\Program Files\WindowsApps\Microsoft.Office.OneNote_16001.14326.22094.0_x64__8wekyb3d8bbwe\onenoteim.exe"
-^<^>!S:: OpenApplication "ahk_exe Spotify.exe", "C:\Program Files\WindowsApps\SpotifyAB.SpotifyMusic_1.256.502.0_x64__zpdnekdrzrea0\Spotify.exe"
-^<^>!T:: OpenApplication "ahk_exe cmd.exe", "C:\Windows\System32\cmd.exe"
+^<^>!C:: OpenUWPApp "Chromium", "ahk_exe chrome.exe"
+^<^>!G:: OpenUWPApp "GitHub Desktop"
+^<^>!M:: OpenUWPApp "OUTLOOK"
+^<^>!E:: OpenUWPApp "explorer"
+^<^>!V:: OpenUWPApp "Visual Studio Code", "ahk_exe Code.exe"
+^<^>!W:: OpenUWPApp "WhatsApp"
+^<^>!N:: OpenUWPApp "OneNote"
+^<^>!S:: OpenUWPApp "Spotify"
+; ^<^>!T:: OpenUWPApp "command line"
 
-OpenApplication(application, path) {
+OpenUWPApp(appName, processName := "") { ; https://www.autohotkey.com/boards/viewtopic.php?p=438517#p438517
+
+    if !WinExist("ahk_exe " appName ".exe") and !WinExist(processName) {
+        for app in ComObject('Shell.Application').NameSpace('shell:AppsFolder').Items {
+            (app.Name = appName) && RunWait('explorer shell:appsFolder\' app.Path)
+        }
+    } else {
+        if !(processName = "") {
+            CycleAllWindows(processName)
+        } else {
+            CycleAllWindows("ahk_exe " appName ".exe")
+        }
+    }
+}
+
+OpenApplication(application) {
 
     hwnd := WinExist(application)
 
     if hwnd = 0 {
-        CreateWindow(path)
+        Run application
     } else {
         CycleAllWindows(application)
     }
 }
 
-CreateWindow(path) {
-    Run path, , 'Min' ; Start Application
-}
-
 ^Q:: ; Quiting the window
 {
-    WinClose "A"
+    try {
+        WinKill "A"
+    }
 }
 
 ; --------- Window Manager ---------
@@ -171,7 +226,7 @@ CycleAllWindows(application) {
 
         ; Create an array of windows with the same application and desktop
         for win in AllWindows {
-            if StrCompare(win.application, application) = 0 and DllCall("bin\VirtualDesktopAccessor.dll\IsWindowOnCurrentVirtualDesktop", "Ptr", win.hwnd) {
+            if StrCompare(win.application, application) = 0 and DllCall("..\bin\VirtualDesktopAccessor.dll\IsWindowOnCurrentVirtualDesktop", "Ptr", win.hwnd) {
                 appWindows.Push(win)
             }
         }
@@ -204,6 +259,14 @@ CycleAllWindows(application) {
     }
 }
 
+^A:: { ; Ctrl + ö makes the window smaller
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    try {
+        win.MakeSmallerW(10)
+    }
+}
+
 ^M:: { ; Ctrl + M maximizes the window
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
@@ -215,7 +278,9 @@ CycleAllWindows(application) {
 ^N:: {
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    CreateWindow(win.path)
+    try {
+        RunWait win.path
+    }
 }
 
 ^+Y:: {
@@ -227,13 +292,13 @@ CycleAllWindows(application) {
 }
 
 ^+N:: {
-    hwnd := WinGetID("A")
-
-    command := Format('powershell.exe -ExecutionPolicy Bypass -File "{1}\getAumid.ps1" -hwnd {2}', A_ScriptDir, hwnd)
-
-    output := RunCMDCommand(command)
-    MsgBox(output)
+    MyGui := Gui(, "Process List")
+    LV := MyGui.Add("ListView", "x2 y0 w400 h500", ["Name"])
+    for app in ComObject('Shell.Application').NameSpace('shell:AppsFolder').Items
+		LV.Add("", app.Name)
+    MyGui.Show()
 }
+
 
 
 RunCMDCommand(command) {
@@ -253,15 +318,49 @@ RunCMDCommand(command) {
 
 ; --------- Made by Ai (Copilot, Blackbox, ChatGPT, Claude) ---------
 
-
-
-^+$:: ; Removing Taskbar (copied from internet: https://www.autohotkey.com/boards/viewtopic.php?t=113325)
-{ 
-    static ABM_SETSTATE := 0xA, ABS_AUTOHIDE := 0x1, ABS_ALWAYSONTOP := 0x2
-    static hide := 0
-    hide := not hide
-    APPBARDATA := Buffer(size := 2*A_PtrSize + 2*4 + 16 + A_PtrSize, 0)
-    NumPut("UInt", size, APPBARDATA), NumPut("Ptr", WinExist("ahk_class Shell_TrayWnd"), APPBARDATA, A_PtrSize)
-    NumPut("UInt", hide ? ABS_AUTOHIDE : ABS_ALWAYSONTOP, APPBARDATA, size - A_PtrSize)
-    DllCall("Shell32\SHAppBarMessage", "UInt", ABM_SETSTATE, "Ptr", APPBARDATA)
+GetUWPProcessIDViaCOM(windowHwnd) {
+    ; Create COM object for Windows Shell
+    shell := ComObject("Shell.Application")
+    
+    ; Get Windows view
+    windows := shell.Windows
+    
+    ; Initialize variables for process info
+    procID := 0
+    
+    try {
+        for window in windows {
+            ; Try to match the window handle
+            if (window.HWND = windowHwnd) {
+                ; Get the associated process
+                procID := window.ProcessID
+                break
+            }
+        }
+    } catch Error as e {
+        ; Handle any COM errors
+        MsgBox "Error: " e.Message
+        return 0
+    }
+    
+    return procID
 }
+
+GetMinMaxInfo() { ; https://www.autohotkey.com/boards/viewtopic.php?t=36412
+    Global WM_GETMINMAXINFO
+    Static MINMAXINFO := Buffer(40, 0)
+    NumPut(0, MINMAXINFO, 24, "Int")
+    NumPut(0, MINMAXINFO, 28, "Int")
+    NumPut(0, MINMAXINFO, 32, "Int")
+    NumPut(0, MINMAXINFO, 36, "Int")
+    
+    SendMessage(WM_GETMINMAXINFO, 0, MINMAXINFO.Ptr, "A")
+    
+    return {
+        min_x: NumGet(MINMAXINFO, 24, "Int"), 
+        min_y: NumGet(MINMAXINFO, 28, "Int"),
+        max_x: NumGet(MINMAXINFO, 32, "Int"),
+        max_y: NumGet(MINMAXINFO, 36, "Int")
+    }
+}
+

@@ -54,7 +54,7 @@ class WinClass {
         this.h := h
     }
 
-    Move(side) { ; Move window to left or right side
+    MoveTo(side) { ; Move window to left or right side
 
         if side = "Left" {
             WinMove -this.borderW//2, -this.borderH//2, A_ScreenWidth//2 + this.borderW, A_ScreenHeight + this.borderH, this.hwnd ; Move to left side
@@ -87,30 +87,42 @@ class WinClass {
         this.Update(this.prevState)
     }
 
-    MakeSmallerW(change) {
+    Resize(changeW := 0, changeH := 0) {
         ; change indicates if the window is being made smaller or bigger
         ; change = negative for smaller, change = positive for bigger, absolute value of sb indicates the change in size
         minW := SysGet(28) ; Get the minimum width of the window (SM_CXMIN)
+        minH := SysGet(29) ; Get the minimum height of the window (SM_CYMIN)
         maxW := SysGet(61) ; Get the maximum width of the window (SM_CXMAX)
-        if (this.w + change < minW) { ; If the next reduction is less than the minimum width, window will not be resized
-            sb := 0
+        maxH := SysGet(62) ; Get the maximum height of the window (SM_CYMAX)
+
+        if (this.w + changeW < minW) { ; If the next reduction is less than the minimum width, window will not be resized
+            changeW := 0
+        }
+        if (this.h + changeH < minH) { ; If the next reduction is less than the minimum height, window will not be resized
+            changeH := 0
         }
 
-        changeL := - change/2
-        changeR := change
+        changeL := - changeW/2 ; change in the left side
+        changeR := changeW ; change in the right side
+        changeU := - changeH/2 ; change in the upper side
+        changeD := changeH ; change in the lower/down side
 
         if this.x + changeL < 0 { ; if the left side of the window is out of the screen
             changeL := 0
-        } else if this.x + this.w + changeR > A_ScreenWidth { ; if the right side of the window is out of the screen
+            changeR := changeW/2
+        }
+        if this.x + this.w + changeR > A_ScreenWidth { ; if the right side of the window is out of the screen
             changeR := 0
         }
+        if this.y + changeU < 0 { ; if the upper side of the window is out of the screen
+            changeU := 0
+            changeD := changeH/2
+        }
+        if this.y + this.h + changeD > A_ScreenHeight { ; if the lower side of the window is out of the screen
+            changeD := 0
+        }
 
-        WinMove this.x + changeL, this.y, this.w + changeR, this.h, this.hwnd
-        this.Update()
-    }
-
-    MakeSmallerH(change) {
-        WinMove this.x, this.y + change / 2, this.w, this.h - change/2, this.hwnd
+        WinMove this.x + changeL, this.y + changeU, this.w + changeR, this.h + changeD, this.hwnd
         this.Update()
     }
 
@@ -160,17 +172,17 @@ CheckAllWindows() { ; Checks if every window is registered
 
 SetTimer CheckAllWindows, 250
 
-^<^>!C:: OpenUWPApp "Chromium", "ahk_exe chrome.exe"
-^<^>!G:: OpenUWPApp "GitHub Desktop"
-^<^>!M:: OpenUWPApp "OUTLOOK"
-^<^>!E:: OpenUWPApp "explorer"
-^<^>!V:: OpenUWPApp "Visual Studio Code", "ahk_exe Code.exe"
-^<^>!W:: OpenUWPApp "WhatsApp"
-^<^>!N:: OpenUWPApp "OneNote"
-^<^>!S:: OpenUWPApp "Spotify"
-; ^<^>!T:: OpenUWPApp "command line"
+^<^>!C:: OpenApp "Chromium", "ahk_exe chrome.exe"
+^<^>!G:: OpenApp "GitHub Desktop"
+^<^>!M:: OpenApp "OUTLOOK"
+^<^>!E:: OpenApp "explorer"
+^<^>!V:: OpenApp "Visual Studio Code", "ahk_exe Code.exe"
+^<^>!W:: OpenApp "WhatsApp"
+^<^>!N:: OpenApp "OneNote"
+^<^>!S:: OpenApp "Spotify"
+; ^<^>!T:: OpenApp "command line"
 
-OpenUWPApp(appName, processName := "") { ; https://www.autohotkey.com/boards/viewtopic.php?p=438517#p438517
+OpenApp(appName, processName := "") { ; https://www.autohotkey.com/boards/viewtopic.php?p=438517#p438517
 
     if !WinExist("ahk_exe " appName ".exe") and !WinExist(processName) {
         for app in ComObject('Shell.Application').NameSpace('shell:AppsFolder').Items {
@@ -248,22 +260,54 @@ CycleAllWindows(application) {
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     try {
-        win.Move("Left")
+        win.MoveTo("Left")
     }
 }
 ^Right:: { ; Ctrl + Right moves window to the right half
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     try {
-        win.Move("Right") 
+        win.MoveTo("Right") 
     }
 }
 
-^A:: { ; Ctrl + ö makes the window smaller
+^,:: { ; Ctrl + , makes the window smaller in x
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     try {
-        win.MakeSmallerW(10)
+        win.Resize(-10, )
+    }
+}
+
+^.:: { ; Ctrl + . makes the window bigger in x
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    try {
+        win.Resize(10, )
+    }
+}
+
+^¨:: { ; Ctrl + ¨ makes the window bigger in y
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    try {
+        win.Resize(, 10)
+    }
+}
+
+^-:: { ; Ctrl + - makes the window smaller in y
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    try {
+        win.Resize(, -10)
+    }
+}
+
+^ö:: { ; Ctrl + ö makes the window bigger in y
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    try {
+        win.Move()
     }
 }
 

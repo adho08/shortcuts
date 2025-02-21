@@ -1,6 +1,8 @@
 ﻿#Requires AutoHotkey 2.0+    ; Needs v2
 #SingleInstance Force        ; Run only one instance
 
+reziseChange := 50
+
 global AllWindows := Array() ; Array of all windows
 global WM_GETMINMAXINFO := 0x0024
 
@@ -13,7 +15,9 @@ class WinClass {
         this.hwnd := hwnd
         this.state := 'n'
 
-        WinGetClientPos(, , &actualW, &actualH, this.hwnd)
+        WinGetClientPos(&actualX, &actualY, &actualW, &actualH, this.hwnd)
+        this.actualX := actualX
+        this.actualY := actualY
         this.actualW := actualW
         this.actualH := actualH
 
@@ -23,8 +27,8 @@ class WinClass {
         this.w := w
         this.h := h
 
-        this.borderW := this.w - this.actualW
-        this.borderH := this.h - this.actualH
+        this.borderX := this.w - this.actualW
+        this.borderY := this.h - this.actualH
 
         this.pid := WinGetPID(hwnd)
 
@@ -36,6 +40,11 @@ class WinClass {
         try {
             this.path := WinGetProcessPath(this.hwnd)
         }
+
+        this.dockedL := false
+        this.dockedR := false
+        this.dockedU := false
+        this.dockedD := false
     }
 
     Update(prevState := this.state) {
@@ -52,15 +61,21 @@ class WinClass {
         this.y := y
         this.w := w
         this.h := h
+
+        WinGetClientPos(&actualX, &actualY, &actualW, &actualH, this.hwnd)
+        this.actualX := actualX
+        this.actualY := actualY
+        this.actualW := actualW
+        this.actualH := actualH
     }
 
     MoveTo(side) { ; Move window to left or right side
 
         if side = "Left" {
-            WinMove -this.borderW//2, -this.borderH//2, A_ScreenWidth//2 + this.borderW, A_ScreenHeight + this.borderH, this.hwnd ; Move to left side
+            WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to left side
             this.state := 'l'
         } else if side = "Right" {
-            WinMove A_ScreenWidth // 2 - this.borderW//2, -this.borderH//2, A_ScreenWidth//2 + this.borderW, A_ScreenHeight + this.borderH, this.hwnd ; Move to right side
+            WinMove A_ScreenWidth / 2 - this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to right side
             this.state := 'r'
         }
         ; Update the position
@@ -78,7 +93,7 @@ class WinClass {
 
         if this.state != 'm' {
             try { ; Some windows cannot be moved or resized by this command
-                WinMove -this.borderW/2, -this.borderH/2, A_ScreenWidth + this.borderW, A_ScreenHeight + this.borderH, this.hwnd
+                WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth + this.borderX, A_ScreenHeight + this.borderY, this.hwnd
                 this.state := 'm'
             }
         } else {
@@ -87,40 +102,51 @@ class WinClass {
         this.Update(this.prevState)
     }
 
-    Resize(changeW := 0, changeH := 0) {
+    Resize(changeW := 0, changeH := 0) { ; fault here!!!
         ; change indicates if the window is being made smaller or bigger
         ; change = negative for smaller, change = positive for bigger, absolute value of sb indicates the change in size
         minW := SysGet(28) ; Get the minimum width of the window (SM_CXMIN)
         minH := SysGet(29) ; Get the minimum height of the window (SM_CYMIN)
-        maxW := SysGet(61) ; Get the maximum width of the window (SM_CXMAX)
-        maxH := SysGet(62) ; Get the maximum height of the window (SM_CYMAX)
 
         if (this.w + changeW < minW) { ; If the next reduction is less than the minimum width, window will not be resized
             changeW := 0
+            MsgBox "Minimum width reached"
         }
         if (this.h + changeH < minH) { ; If the next reduction is less than the minimum height, window will not be resized
             changeH := 0
+            MsgBox "Minimum height reached"
         }
 
-        changeL := - changeW/2 ; change in the left side
-        changeR := changeW ; change in the right side
-        changeU := - changeH/2 ; change in the upper side
-        changeD := changeH ; change in the lower/down side
-
-        if this.x + changeL < 0 { ; if the left side of the window is out of the screen
+        ; Define the changes in the window size in each direction
+        changeL := - changeW/2 
+        changeR := changeW
+        changeU := - changeH/2
+        changeD := changeH
+        
+        if this.dockedL or (this.x + changeL) < (- this.borderX/2) { ; if the left side of the window is out of the screen
             changeL := 0
+            this.x := - this.borderX/2 ; resize to border of left side
             changeR := changeW/2
+            this.dockedL := true
         }
-        if this.x + this.w + changeR > A_ScreenWidth { ; if the right side of the window is out of the screen
+        if this.dockedR or (this.x + this.w + changeR) > (A_ScreenWidth + this.borderX/2) { ; if the right side of the window is out of the screen
             changeR := 0
+            this.w := A_ScreenWidth + this.borderX - this.x ; resize to border of right side
+            this.dockedR := true
         }
-        if this.y + changeU < 0 { ; if the upper side of the window is out of the screen
+        if this.dockedU or (this.y + changeU) < (- this.borderY/2) { ; if the upper side of the window is out of the screen
             changeU := 0
+            this.y := - this.borderY/2 ; resize to border of upper side
             changeD := changeH/2
+            this.dockedU := true
         }
-        if this.y + this.h + changeD > A_ScreenHeight { ; if the lower side of the window is out of the screen
+        if this.dockedD or (this.y + this.h + changeD) > (A_ScreenHeight + this.borderY/2) { ; if the lower side of the window is out of the screen
             changeD := 0
+            this.h := A_ScreenHeight + this.borderY - this.y ; resize to border of lower side
+            this.dockedD := true
         }
+
+        ; MsgBox "changeL: " changeL ", changeR: " changeR ", changeU: " changeU ", changeD: " changeD
 
         WinMove this.x + changeL, this.y + changeU, this.w + changeR, this.h + changeD, this.hwnd
         this.Update()
@@ -135,7 +161,13 @@ class WinClass {
     }
 
     PrintData() { ; debugging
-        MsgBox "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h ", State: " this.state ", hwnd: " this.hwnd ", application: " this.application ", PID: " this.pid
+        str := "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h
+        str .= "`nhwnd: " this.hwnd ", application: " this.application 
+        str .= "`nborderX: " this.borderX ", borderY: " this.borderY ", actualW: " this.actualW ", actualH: " this.actualH 
+        str .= "`ndockedL: " this.dockedL ", dockedR: " this.dockedR ", dockedU: " this.dockedU ", dockedD: " this.dockedD
+
+        MsgBox str
+        MsgBox A_ScreenWidth
     }
 }
 
@@ -182,7 +214,7 @@ SetTimer CheckAllWindows, 250
 ^<^>!S:: OpenApp "Spotify"
 ; ^<^>!T:: OpenApp "command line"
 
-OpenApp(appName, processName := "") { ; https://www.autohotkey.com/boards/viewtopic.php?p=438517#p438517
+OpenApp(appName, processName := "") { ; https:/www.autohotkey.com/boards/viewtopic.php?p=438517#p438517
 
     if !WinExist("ahk_exe " appName ".exe") and !WinExist(processName) {
         for app in ComObject('Shell.Application').NameSpace('shell:AppsFolder').Items {
@@ -259,14 +291,14 @@ CycleAllWindows(application) {
 ^Left:: { ; Ctrl + Left moves window to the left half
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    try {
+    if win is WinClass {
         win.MoveTo("Left")
     }
 }
 ^Right:: { ; Ctrl + Right moves window to the right half
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    try {
+    if win is WinClass {
         win.MoveTo("Right") 
     }
 }
@@ -274,39 +306,40 @@ CycleAllWindows(application) {
 ^,:: { ; Ctrl + , makes the window smaller in x
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    try {
-        win.Resize(-10, )
+    if win is WinClass {
+        win.Resize(-reziseChange, )
     }
 }
 
 ^.:: { ; Ctrl + . makes the window bigger in x
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    try {
-        win.Resize(10, )
+    if win is WinClass {
+        win.Resize(reziseChange, )
     }
 }
 
 ^¨:: { ; Ctrl + ¨ makes the window bigger in y
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    try {
-        win.Resize(, 10)
+    if win is WinClass {
+        win.Resize(, reziseChange)
     }
 }
 
 ^-:: { ; Ctrl + - makes the window smaller in y
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    try {
-        win.Resize(, -10)
+    if win is WinClass {
+
+        win.Resize(, -reziseChange)
     }
 }
 
 ^ö:: { ; Ctrl + ö makes the window bigger in y
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    try {
+    if win is WinClass {
         win.Move()
     }
 }
@@ -314,7 +347,7 @@ CycleAllWindows(application) {
 ^M:: { ; Ctrl + M maximizes the window
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    try {
+    if win is WinClass {
         win.Maximize()
     }
 }
@@ -322,7 +355,7 @@ CycleAllWindows(application) {
 ^N:: {
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
-    try {
+    if win is WinClass {
         RunWait win.path
     }
 }
@@ -330,7 +363,7 @@ CycleAllWindows(application) {
 ^+Y:: {
     hwnd := WinExist("A")
     win := GetWindowObj(hwnd)
-    try {
+    if win is WinClass {
         win.PrintData()
     }
 }
@@ -390,7 +423,7 @@ GetUWPProcessIDViaCOM(windowHwnd) {
     return procID
 }
 
-GetMinMaxInfo() { ; https://www.autohotkey.com/boards/viewtopic.php?t=36412
+GetMinMaxInfo() { ; https:/www.autohotkey.com/boards/viewtopic.php?t=36412
     Global WM_GETMINMAXINFO
     Static MINMAXINFO := Buffer(40, 0)
     NumPut(0, MINMAXINFO, 24, "Int")
@@ -408,3 +441,4 @@ GetMinMaxInfo() { ; https://www.autohotkey.com/boards/viewtopic.php?t=36412
     }
 }
 
+; --------- Utility Functions ---------

@@ -2,6 +2,7 @@
 #SingleInstance Force        ; Run only one instance
 
 reziseChange := 50
+moveChange := 50
 
 global AllWindows := Array() ; Array of all windows
 global WM_GETMINMAXINFO := 0x0024
@@ -122,52 +123,48 @@ class WinClass {
         changeR := changeW
         changeU := - changeH/2
         changeD := changeH
-        
-        if this.dockedL or (this.x + changeL) < (- this.borderX/2) { ; if the left side of the window is out of the screen
+
+        if this.dockedL or (this.actualX + changeL) < 0 { ; if the left side of the window is out of the screen
             changeL := 0
             this.x := - this.borderX/2 ; resize to border of left side
             changeR := changeW/2
             this.dockedL := true
         }
-        if this.dockedR or (this.x + this.w + changeR) > (A_ScreenWidth + this.borderX/2) { ; if the right side of the window is out of the screen
+        if this.dockedR or (this.actualX + this.actualW + changeR) > A_ScreenWidth { ; if the right side of the window is out of the screen
             changeR := 0
-            this.w := A_ScreenWidth + this.borderX - this.x ; resize to border of right side
+            this.w := A_ScreenWidth + this.borderX / 2 - this.x - changeL ; resize to border of right side
             this.dockedR := true
         }
-        if this.dockedU or (this.y + changeU) < (- this.borderY/2) { ; if the upper side of the window is out of the screen
+        if this.dockedU or (this.actualY + changeU) < 0 { ; if the upper side of the window is out of the screen
             changeU := 0
             this.y := - this.borderY/2 ; resize to border of upper side
             changeD := changeH/2
             this.dockedU := true
         }
-        if this.dockedD or (this.y + this.h + changeD) > (A_ScreenHeight + this.borderY/2) { ; if the lower side of the window is out of the screen
+        if this.dockedD or (this.actualY + this.actualH + changeD) > A_ScreenHeight { ; if the lower side of the window is out of the screen
             changeD := 0
-            this.h := A_ScreenHeight + this.borderY - this.y ; resize to border of lower side
+            this.h := A_ScreenHeight + this.borderY / 2 - this.y - changeU ; resize to border of lower side
             this.dockedD := true
-        }
-
-        ; MsgBox "changeL: " changeL ", changeR: " changeR ", changeU: " changeU ", changeD: " changeD
-
+        }        
+        
         WinMove this.x + changeL, this.y + changeU, this.w + changeR, this.h + changeD, this.hwnd
         this.Update()
     }
 
-    MakeBigger() {
-
-    }
-
-    Drive() {
-
+    Move(changeX := 0, changeY := 0) {
+        WinMove this.x + changeX, this.y + changeY, this.w, this.h
     }
 
     PrintData() { ; debugging
-        str := "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h
+
+        this.Update()
+
+        str := "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h ", r: " this.x + this.w ", b: " this.y + this.h
         str .= "`nhwnd: " this.hwnd ", application: " this.application 
         str .= "`nborderX: " this.borderX ", borderY: " this.borderY ", actualW: " this.actualW ", actualH: " this.actualH 
         str .= "`ndockedL: " this.dockedL ", dockedR: " this.dockedR ", dockedU: " this.dockedU ", dockedD: " this.dockedD
 
         MsgBox str
-        MsgBox A_ScreenWidth
     }
 }
 
@@ -336,11 +333,35 @@ CycleAllWindows(application) {
     }
 }
 
-^ö:: { ; Ctrl + ö makes the window bigger in y
+^ö:: { ; Ctrl + ö moves the window in -x direction
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
-        win.Move()
+        win.Move(-10, )
+    }
+}
+
+^$:: { ; Ctrl + $ moves the window in +x direction
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    if win is WinClass {
+        win.Move(10, )
+    }
+}
+
+^ü:: { ; Ctrl + ü moves the window in -y direction
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    if win is WinClass {
+        win.Move(, -10)
+    }
+}
+
+^ä:: { ; Ctrl + a moves the window in +y direction
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    if win is WinClass {
+        win.Move(, 10)
     }
 }
 

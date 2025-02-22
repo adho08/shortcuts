@@ -152,7 +152,26 @@ class WinClass {
     }
 
     Move(changeX := 0, changeY := 0) {
-        WinMove this.x + changeX, this.y + changeY, this.w, this.h
+
+        if this.actualX + changeX < 0 {
+            changeX := 0
+            this.x := - this.borderX/2 ; resize to border of left side
+        }
+        if this.actualX + this.actualW + changeX > A_ScreenWidth {
+            changeX := 0
+            this.x := A_ScreenWidth + this.borderX/2 - this.w
+        }
+        if this.actualY + changeY < 0 {
+            changeY := 0
+            this.y := - this.borderY/2
+        }
+        if this.actualY + this.actualH + changeY > A_ScreenHeight {
+            changeY := 0
+            this.y := A_ScreenHeight + this.borderY/2 - this.h
+        }
+
+        WinMove this.x + changeX, this.y + changeY, this.w, this.h, this.hwnd
+        this.Update()
     }
 
     PrintData() { ; debugging
@@ -337,7 +356,7 @@ CycleAllWindows(application) {
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
-        win.Move(-10, )
+        win.Move(-moveChange, )
     }
 }
 
@@ -345,7 +364,7 @@ CycleAllWindows(application) {
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
-        win.Move(10, )
+        win.Move(moveChange, )
     }
 }
 
@@ -353,7 +372,7 @@ CycleAllWindows(application) {
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
-        win.Move(, -10)
+        win.Move(, -moveChange)
     }
 }
 
@@ -361,7 +380,7 @@ CycleAllWindows(application) {
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
-        win.Move(, 10)
+        win.Move(, moveChange)
     }
 }
 

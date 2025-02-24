@@ -1,5 +1,8 @@
 ﻿#Requires AutoHotkey 2.0+    ; Needs v2
 #SingleInstance Force        ; Run only one instance
+if !A_IsAdmin {
+    Run "*RunAs " A_ScriptFullPath
+}
 
 reziseChange := 50
 moveChange := 50
@@ -16,17 +19,7 @@ class WinClass {
         this.hwnd := hwnd
         this.state := 'n'
 
-        WinGetClientPos(&actualX, &actualY, &actualW, &actualH, this.hwnd)
-        this.actualX := actualX
-        this.actualY := actualY
-        this.actualW := actualW
-        this.actualH := actualH
-
-        WinGetPos(&x, &y, &w, &h, this.hwnd)
-        this.x := x
-        this.y := y
-        this.w := w
-        this.h := h
+        this.Update()
 
         this.borderX := this.w - this.actualW
         this.borderY := this.h - this.actualH
@@ -34,7 +27,10 @@ class WinClass {
         this.pid := WinGetPID(hwnd)
 
         this.application := ""
-        try { ; Some windows are hosted by ApplicationFrameHost.exe (E.g. Calculator, OneNote for Windows 10, etc.)
+
+        ; Some windows are hosted by ApplicationFrameHost.exe (E.g. Calculator, OneNote for Windows 10, etc.)
+
+        try {
             this.application := "ahk_exe " WinGetProcessName(this.hwnd)
         }
 
@@ -46,9 +42,23 @@ class WinClass {
         this.dockedR := false
         this.dockedU := false
         this.dockedD := false
+
+        ; ----------- generated -----------
+
+        MINMAXINFO := Buffer(40, 0)
+        SendMessage WM_GETMINMAXINFO,, MINMAXINFO.Ptr,,"ahk_id " this.hwnd ; WM_GETMINMAXINFO := 0x24
+        this.minW := NumGet(MINMAXINFO, 24, "Int") ;ptMinTrackSize
+        this.minH := NumGet(MINMAXINFO, 28, "Int")
     }
 
     Update(prevState := this.state) {
+        WinGetPos(&x, &y, &w, &h, this.hwnd)
+        ; Update the position
+        this.x := x
+        this.y := y
+        this.w := w
+        this.h := h
+        
         ; Save previous data
         this.prevX := this.x
         this.prevY := this.y
@@ -56,29 +66,62 @@ class WinClass {
         this.prevH := this.h
         this.prevState := prevState
 
-        WinGetPos(&x, &y, &w, &h, this.hwnd)
-        ; Update the position
-        this.x := x
-        this.y := y
-        this.w := w
-        this.h := h
-
         WinGetClientPos(&actualX, &actualY, &actualW, &actualH, this.hwnd)
         this.actualX := actualX
         this.actualY := actualY
         this.actualW := actualW
         this.actualH := actualH
+
+        ; Check the state of the window
+        
     }
 
-    MoveTo(side) { ; Move window to left or right side
+    MoveTo(horizontal := "", vertical := "") { ; Move window to left, right, top or bottom half. Additionally it can be moved to either of the 4 corners.
 
-        if side = "Left" {
-            WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to left side
-            this.state := 'l'
-        } else if side = "Right" {
-            WinMove A_ScreenWidth / 2 - this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to right side
-            this.state := 'r'
+        if vertical = "" {
+            if horizontal = "Left" {
+                WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to left half
+                this.state := 'l'
+                this.dockedL := true
+            } else if horizontal = "Right" {
+                WinMove A_ScreenWidth/2 - this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to right half
+                this.state := 'r'
+                this.dockedR := true
+            }
+        } else if horizontal = "" {
+            if vertical = "Up" {
+                WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; Move to top half
+                this.state := 'u'
+                this.dockedU := true
+            } else if vertical = "Down" {
+                WinMove -this.borderX/2, (A_ScreenHeight - this.borderY)/2, A_ScreenWidth + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; Move to bottom half
+                this.state := 'd'
+                this.dockedD := true
+            }
+        } else {
+            if horizontal = "Left" {
+                if vertical = "Up" { 
+                    WinMove , , , A_ScreenHeight/2 + this.borderY, this.hwnd ; Top-left corner
+                    this.dockedL := true
+                    this.dockedU := true
+                } else if vertical = "Down" {
+                    WinMove , (A_ScreenHeight - this.borderY)/2, , A_ScreenHeight/2 + this.borderY, this.hwnd ; bottom-left corner
+                    this.dockedL := true
+                    this.dockedD := true
+                }
+            } else if horizontal = "Right" {
+                if vertical = "Up" {
+                    WinMove , , , A_ScreenHeight/2 + this.borderY, this.hwnd ; top-right corner
+                    this.dockedR := true
+                    this.dockedU := true
+                } else if vertical = "Down" {
+                    WinMove , (A_ScreenHeight - this.borderY)/2, , A_ScreenHeight/2 + this.borderY, this.hwnd ; bottom-right corner
+                    this.dockedR := true
+                    this.dockedD := true
+                }
+            }
         }
+
         ; Update the position
         this.Update()
     }
@@ -90,12 +133,18 @@ class WinClass {
     Quit() {
     }
 
-    Maximize() { ; Maximize the window
+    Maximize() {
 
         if this.state != 'm' {
             try { ; Some windows cannot be moved or resized by this command
                 WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth + this.borderX, A_ScreenHeight + this.borderY, this.hwnd
                 this.state := 'm'
+
+                ; If docked in every side was to be true, resizing would not be possible anymore
+                this.dockedL := false
+                this.dockedR := false
+                this.dockedU := false
+                this.dockedD := false
             }
         } else {
             WinMove this.prevX, this.prevY, this.prevW, this.prevH, this.hwnd
@@ -103,19 +152,13 @@ class WinClass {
         this.Update(this.prevState)
     }
 
-    Resize(changeW := 0, changeH := 0) { ; fault here!!!
-        ; change indicates if the window is being made smaller or bigger
-        ; change = negative for smaller, change = positive for bigger, absolute value of sb indicates the change in size
-        minW := SysGet(28) ; Get the minimum width of the window (SM_CXMIN)
-        minH := SysGet(29) ; Get the minimum height of the window (SM_CYMIN)
+    Resize(changeW := 0, changeH := 0) {
 
-        if (this.w + changeW < minW) { ; If the next reduction is less than the minimum width, window will not be resized
+        if (this.actualW + changeW < this.minW) { ; If the next width is less than the minimum width
             changeW := 0
-            MsgBox "Minimum width reached"
         }
-        if (this.h + changeH < minH) { ; If the next reduction is less than the minimum height, window will not be resized
+        if (this.actualH + changeH < this.minH) { ; If the next height is less than the minimum height
             changeH := 0
-            MsgBox "Minimum height reached"
         }
 
         ; Define the changes in the window size in each direction
@@ -145,7 +188,12 @@ class WinClass {
             changeD := 0
             this.h := A_ScreenHeight + this.borderY / 2 - this.y - changeU ; resize to border of lower side
             this.dockedD := true
-        }        
+        }
+
+        if this.dockedL and this.dockedR {
+            this.dockedL := false
+            this.dockedR := false
+        }
         
         WinMove this.x + changeL, this.y + changeU, this.w + changeR, this.h + changeD, this.hwnd
         this.Update()
@@ -153,21 +201,30 @@ class WinClass {
 
     Move(changeX := 0, changeY := 0) {
 
-        if this.actualX + changeX < 0 {
+        this.dockedL := false
+        this.dockedR := false
+        this.dockedU := false
+        this.dockedD := false
+
+        if this.actualX + changeX < 0 { ; If the window outside the left side of the screen
             changeX := 0
-            this.x := - this.borderX/2 ; resize to border of left side
+            this.x := -this.borderX/2
+            this.dockedL := true
         }
-        if this.actualX + this.actualW + changeX > A_ScreenWidth {
+        if this.actualX + this.actualW + changeX > A_ScreenWidth { ; If the window is outside the right side of the screen
             changeX := 0
             this.x := A_ScreenWidth + this.borderX/2 - this.w
+            this.dockedR := true
         }
-        if this.actualY + changeY < 0 {
+        if this.actualY + changeY < 0 { ; If the window is outside the top side of the screen
             changeY := 0
-            this.y := - this.borderY/2
+            this.y := -this.borderY/2
+            this.dockedU := true
         }
-        if this.actualY + this.actualH + changeY > A_ScreenHeight {
+        if this.actualY + this.actualH + changeY > A_ScreenHeight { ; If the window is outside the bottom side of the screen
             changeY := 0
             this.y := A_ScreenHeight + this.borderY/2 - this.h
+            this.dockedD := true
         }
 
         WinMove this.x + changeX, this.y + changeY, this.w, this.h, this.hwnd
@@ -179,6 +236,7 @@ class WinClass {
         this.Update()
 
         str := "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h ", r: " this.x + this.w ", b: " this.y + this.h
+        str .= "`nminW: " this.minW ", minH: " this.minH
         str .= "`nhwnd: " this.hwnd ", application: " this.application 
         str .= "`nborderX: " this.borderX ", borderY: " this.borderY ", actualW: " this.actualW ", actualH: " this.actualH 
         str .= "`ndockedL: " this.dockedL ", dockedR: " this.dockedR ", dockedU: " this.dockedU ", dockedD: " this.dockedD
@@ -206,13 +264,13 @@ CheckAllWindows() { ; Checks if every window is registered
     for hwnd in hwnds {
         winInfo := WinGetStyle(hwnd)
         win := GetWindowObj(hwnd)
-        if Type(win) = "Integer" and winInfo & 0x10000000 { ; If the window is not registered and visible
+        if !(win is Winclass) and winInfo & 0x10000000 { ; If the window is not registered and visible
 
             ; Make a new WinClass object for the window
             win := WinClass(hwnd)
             ; Add the window to the list
             AllWindows.Push(win)
-        } else {
+        } else if win is Winclass{
             win.Update()
         }
     }
@@ -304,18 +362,50 @@ CycleAllWindows(application) {
         lastActivatedApp := application
 }
 
-^Left:: { ; Ctrl + Left moves window to the left half
+^Left:: { ; Ctrl + Left moves window to the left half or to either corner on left side
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
-        win.MoveTo("Left")
+        switch win.state {
+            case 'u': win.MoveTo("Left", "Up")
+            case 'd': win.MoveTo("Left", "Down")
+            default: win.MoveTo("Left", ) 
+        }
     }
 }
-^Right:: { ; Ctrl + Right moves window to the right half
+^Right:: { ; Ctrl + Right moves window to the right half or to either corner on right side
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
-        win.MoveTo("Right") 
+        switch win.state {
+            case 'u': win.MoveTo("Right", "Up")
+            case 'd': win.MoveTo("Right", "Down")
+            default: win.MoveTo("Right", ) 
+        }
+    }
+}
+
+^Up:: { ; Ctrl + Up moves window to the top half or to either corner on upper side
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    if win is WinClass {
+        switch win.state {
+            case 'l': win.MoveTo("Left", "Up")
+            case 'r': win.MoveTo("Right", "Up")
+            default: win.MoveTo(, "Up") 
+        }
+    }
+}
+
+^Down:: { ; Ctrl + Down moves window to the bottom half or to either corner on lower side
+    hwnd := WinGetID("A")
+    win := GetWindowObj(hwnd)
+    if win is WinClass {
+        switch win.state {
+            case 'l': win.MoveTo("Left", "Down")
+            case 'r': win.MoveTo("Right", "Down")
+            default: win.MoveTo(, "Down") 
+        }
     }
 }
 

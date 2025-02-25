@@ -78,13 +78,18 @@ class WinClass {
 
     MoveTo(horizontal := "", vertical := "") { ; Move window to left, right, top or bottom half. Additionally it can be moved to either of the 4 corners.
 
+        this.dockedL := false
+        this.dockedR := false
+        this.dockedU := false
+        this.dockedD := false
+
         if vertical = "" {
             if horizontal = "Left" {
                 WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to left half
                 this.state := 'l'
                 this.dockedL := true
             } else if horizontal = "Right" {
-                WinMove A_ScreenWidth/2 - this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to right half
+                WinMove (A_ScreenWidth - this.borderX)/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to right half
                 this.state := 'r'
                 this.dockedR := true
             }
@@ -101,21 +106,25 @@ class WinClass {
         } else {
             if horizontal = "Left" {
                 if vertical = "Up" { 
-                    WinMove , , , A_ScreenHeight/2 + this.borderY, this.hwnd ; Top-left corner
+                    WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX , A_ScreenHeight/2 + this.borderY, this.hwnd ; Top-left corner
+                    this.state := 'lu'
                     this.dockedL := true
                     this.dockedU := true
                 } else if vertical = "Down" {
-                    WinMove , (A_ScreenHeight - this.borderY)/2, , A_ScreenHeight/2 + this.borderY, this.hwnd ; bottom-left corner
+                    WinMove -this.borderX/2, (A_ScreenHeight - this.borderY)/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; bottom-left corner
+                    this.state := 'ld'
                     this.dockedL := true
                     this.dockedD := true
                 }
             } else if horizontal = "Right" {
                 if vertical = "Up" {
-                    WinMove , , , A_ScreenHeight/2 + this.borderY, this.hwnd ; top-right corner
+                    WinMove (A_ScreenWidth - this.borderX)/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; top-right corner
+                    this.state := 'ru'
                     this.dockedR := true
                     this.dockedU := true
                 } else if vertical = "Down" {
-                    WinMove , (A_ScreenHeight - this.borderY)/2, , A_ScreenHeight/2 + this.borderY, this.hwnd ; bottom-right corner
+                    WinMove (A_ScreenWidth - this.borderX)/2, (A_ScreenHeight - this.borderY)/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; bottom-right corner
+                    this.state := 'rd'
                     this.dockedR := true
                     this.dockedD := true
                 }
@@ -240,6 +249,7 @@ class WinClass {
         str .= "`nhwnd: " this.hwnd ", application: " this.application 
         str .= "`nborderX: " this.borderX ", borderY: " this.borderY ", actualW: " this.actualW ", actualH: " this.actualH 
         str .= "`ndockedL: " this.dockedL ", dockedR: " this.dockedR ", dockedU: " this.dockedU ", dockedD: " this.dockedD
+        str .= "`nstate: " this.state
 
         MsgBox str
     }

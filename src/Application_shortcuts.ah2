@@ -1,7 +1,9 @@
-﻿#Requires AutoHotkey 2.0+    ; Needs v2
+#Requires AutoHotkey 2.0+    ; Needs v2
 #SingleInstance Force        ; Run only one instance
-if !A_IsAdmin {
-    Run "*RunAs " A_ScriptFullPath
+try { ; By try there is no error Msgbox if user doesn't allow admin access
+    if !A_IsAdmin {
+        Run "*RunAs " A_ScriptFullPath
+    }
 }
 
 reziseChange := 50
@@ -24,7 +26,9 @@ class WinClass {
         this.borderX := this.w - this.actualW
         this.borderY := this.h - this.actualH
 
-        this.pid := WinGetPID(hwnd)
+        try {
+            this.pid := WinGetPID(hwnd)
+        }
 
         this.application := ""
 
@@ -42,6 +46,20 @@ class WinClass {
         this.dockedR := false
         this.dockedU := false
         this.dockedD := false
+
+        ; Keeping the values for coordinates of window in variables to avoid repeated and easy-changable code
+        this.left := -this.borderX/2
+        this.right := A_ScreenWidth + this.borderX
+        this.top := -this.borderY/2
+        this.bottom := A_ScreenHeight + this.borderY
+        this.middleX := this.left + A_ScreenWidth/2
+        this.middleY := this.top + A_ScreenHeight/2
+
+        ; Keeping the values for width and height of window in variables to avoid repeated and easy-changable code
+        this.screenwidth := A_ScreenWidth + this.borderX
+        this.screenheight := A_ScreenHeight + this.borderY
+        this.halfscreenwidth := A_ScreenWidth/2 + this.borderX
+        this.halfscreenheight := A_ScreenHeight/2 + this.borderY
 
         ; ----------- generated -----------
 
@@ -85,45 +103,46 @@ class WinClass {
 
         if vertical = "" {
             if horizontal = "Left" {
-                WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to left half
+                WinMove this.left, this.top, this.halfscreenwidth, this.screenheight, this.hwnd ; Move to left half
                 this.state := 'l'
                 this.dockedL := true
             } else if horizontal = "Right" {
-                WinMove (A_ScreenWidth - this.borderX)/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight + this.borderY, this.hwnd ; Move to right half
+                WinMove this.middleX, this.top, this.halfscreenwidth, this.screenheight, this.hwnd ; Move to right half
                 this.state := 'r'
                 this.dockedR := true
             }
         } else if horizontal = "" {
             if vertical = "Up" {
-                WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; Move to top half
+                WinMove this.left, this.top, this.screenwidth, this.halfscreenheight, this.hwnd ; Move to top half
                 this.state := 'u'
                 this.dockedU := true
             } else if vertical = "Down" {
-                WinMove -this.borderX/2, (A_ScreenHeight - this.borderY)/2, A_ScreenWidth + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; Move to bottom half
+                WinMove this.left, this.middleY, this.screenwidth, this.halfscreenheight, this.hwnd ; Move to bottom half
                 this.state := 'd'
                 this.dockedD := true
             }
         } else {
             if horizontal = "Left" {
                 if vertical = "Up" { 
-                    WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX , A_ScreenHeight/2 + this.borderY, this.hwnd ; Top-left corner
+                    WinMove this.left, this.top, this.halfscreenwidth, this.halfscreenheight, this.hwnd ; top-left corner
                     this.state := 'lu'
                     this.dockedL := true
                     this.dockedU := true
                 } else if vertical = "Down" {
-                    WinMove -this.borderX/2, (A_ScreenHeight - this.borderY)/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; bottom-left corner
+                    WinMove this.left, this.middleY, this.halfscreenwidth, this.halfscreenheight, this.hwnd ; bottom-left corner
                     this.state := 'ld'
                     this.dockedL := true
                     this.dockedD := true
                 }
             } else if horizontal = "Right" {
                 if vertical = "Up" {
-                    WinMove (A_ScreenWidth - this.borderX)/2, -this.borderY/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; top-right corner
+                    WinMove this.middleX, this.top, this.halfscreenwidth, this.halfscreenheight, this.hwnd ; top-right corner
+
                     this.state := 'ru'
                     this.dockedR := true
                     this.dockedU := true
                 } else if vertical = "Down" {
-                    WinMove (A_ScreenWidth - this.borderX)/2, (A_ScreenHeight - this.borderY)/2, A_ScreenWidth/2 + this.borderX, A_ScreenHeight/2 + this.borderY, this.hwnd ; bottom-right corner
+                    WinMove this.middleX, this.middleY, this.halfscreenwidth, this.halfscreenheight, this.hwnd ; bottom-right corner
                     this.state := 'rd'
                     this.dockedR := true
                     this.dockedD := true
@@ -176,24 +195,33 @@ class WinClass {
         changeU := - changeH/2
         changeD := changeH
 
-        if this.dockedL or (this.actualX + changeL) < 0 { ; if the left side of the window is out of the screen
+        if this.dockedL or (this.actualX + changeL) <= 0 { ; if the left side of the window is out of the screen
             changeL := 0
+            if this.dockedL {
+                changeR := changeH/2
+            } else {
+                changeR := changeH
+            }
             this.x := - this.borderX/2 ; resize to border of left side
             changeR := changeW/2
             this.dockedL := true
         }
-        if this.dockedR or (this.actualX + this.actualW + changeR) > A_ScreenWidth { ; if the right side of the window is out of the screen
+        if this.dockedR or (this.actualX + this.actualW + changeR) >= A_ScreenWidth { ; if the right side of the window is out of the screen
             changeR := 0
             this.w := A_ScreenWidth + this.borderX / 2 - this.x - changeL ; resize to border of right side
             this.dockedR := true
         }
-        if this.dockedU or (this.actualY + changeU) < 0 { ; if the upper side of the window is out of the screen
+        if this.dockedU or (this.actualY + changeU) <= 0 { ; if the upper side of the window is out of the screen
             changeU := 0
             this.y := - this.borderY/2 ; resize to border of upper side
-            changeD := changeH/2
+            if this.dockedU {
+                changeD := changeH/2
+            } else {
+                changeD := changeH
+            }
             this.dockedU := true
         }
-        if this.dockedD or (this.actualY + this.actualH + changeD) > A_ScreenHeight { ; if the lower side of the window is out of the screen
+        if this.dockedD or (this.actualY + this.actualH + changeD) >= A_ScreenHeight { ; if the lower side of the window is out of the screen
             changeD := 0
             this.h := A_ScreenHeight + this.borderY / 2 - this.y - changeU ; resize to border of lower side
             this.dockedD := true
@@ -203,17 +231,15 @@ class WinClass {
             this.dockedL := false
             this.dockedR := false
         }
-        
+        if this.dockedU and this.dockedD {
+            this.dockedU := false
+            this.dockedD := false
+        }       
         WinMove this.x + changeL, this.y + changeU, this.w + changeR, this.h + changeD, this.hwnd
         this.Update()
     }
 
     Move(changeX := 0, changeY := 0) {
-
-        this.dockedL := false
-        this.dockedR := false
-        this.dockedU := false
-        this.dockedD := false
 
         if this.actualX + changeX < 0 { ; If the window outside the left side of the screen
             changeX := 0
@@ -288,6 +314,7 @@ CheckAllWindows() { ; Checks if every window is registered
 
 SetTimer CheckAllWindows, 250
 
+; Ctrl + Alt Gr + <Letter>
 ^<^>!C:: OpenApp "Chromium", "ahk_exe chrome.exe"
 ^<^>!G:: OpenApp "GitHub Desktop"
 ^<^>!M:: OpenApp "OUTLOOK"
@@ -296,13 +323,15 @@ SetTimer CheckAllWindows, 250
 ^<^>!W:: OpenApp "WhatsApp"
 ^<^>!N:: OpenApp "OneNote"
 ^<^>!S:: OpenApp "Spotify"
-; ^<^>!T:: OpenApp "command line"
+^<^>!T:: OpenApp "Terminal", "ahk_exe WindowsTerminal.exe"
 
 OpenApp(appName, processName := "") { ; https:/www.autohotkey.com/boards/viewtopic.php?p=438517#p438517
 
     if !WinExist("ahk_exe " appName ".exe") and !WinExist(processName) {
         for app in ComObject('Shell.Application').NameSpace('shell:AppsFolder').Items {
-            (app.Name = appName) && RunWait('explorer shell:appsFolder\' app.Path)
+            if app.Name = appName {
+                RunWait('explorer shell:appsFolder\' app.Path)
+            }
         }
     } else {
         if !(processName = "") {
@@ -372,7 +401,7 @@ CycleAllWindows(application) {
         lastActivatedApp := application
 }
 
-^Left:: { ; Ctrl + Left moves window to the left half or to either corner on left side
+^ö:: { ; Ctrl + ö moves window to the left half or to either corner on left side
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
@@ -383,7 +412,7 @@ CycleAllWindows(application) {
         }
     }
 }
-^Right:: { ; Ctrl + Right moves window to the right half or to either corner on right side
+^$:: { ; Ctrl + $ moves window to the right half or to either corner on right side
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
@@ -395,8 +424,8 @@ CycleAllWindows(application) {
     }
 }
 
-^Up:: { ; Ctrl + Up moves window to the top half or to either corner on upper side
-    hwnd := WinGetID("A")
+^ü:: { ; Ctrl + ü moves window to the top half or to either corner on upper side
+hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
         switch win.state {
@@ -407,8 +436,8 @@ CycleAllWindows(application) {
     }
 }
 
-^Down:: { ; Ctrl + Down moves window to the bottom half or to either corner on lower side
-    hwnd := WinGetID("A")
+^ä:: { ; Ctrl + ä moves window to the bottom half or to either corner on lower side
+hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
         switch win.state {
@@ -419,7 +448,7 @@ CycleAllWindows(application) {
     }
 }
 
-^,:: { ; Ctrl + , makes the window smaller in x
+!ö:: { ; Alt + ö makes the window smaller in x
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
@@ -427,7 +456,7 @@ CycleAllWindows(application) {
     }
 }
 
-^.:: { ; Ctrl + . makes the window bigger in x
+!$:: { ; Alt + $ makes the window bigger in x
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
@@ -435,7 +464,7 @@ CycleAllWindows(application) {
     }
 }
 
-^¨:: { ; Ctrl + ¨ makes the window bigger in y
+!ü:: { ; Alt + ü makes the window bigger in y
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
@@ -443,44 +472,47 @@ CycleAllWindows(application) {
     }
 }
 
-^-:: { ; Ctrl + - makes the window smaller in y
+!ä:: { ; Alt + ä makes the window smaller in y
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
-
         win.Resize(, -reziseChange)
     }
 }
 
-^ö:: { ; Ctrl + ö moves the window in -x direction
++!ö:: { ; Shift + Alt + ö moves the window in -x direction
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
         win.Move(-moveChange, )
+        win.dockedR := false
     }
 }
 
-^$:: { ; Ctrl + $ moves the window in +x direction
++!$:: { ; Shift + Alt + $ moves the window in +x direction
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
         win.Move(moveChange, )
+        win.dockedL := false
     }
 }
 
-^ü:: { ; Ctrl + ü moves the window in -y direction
++!ü:: { ; Shift + Alt + ü moves the window in -y direction
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
         win.Move(, -moveChange)
+        win.dockedD := false
     }
 }
 
-^ä:: { ; Ctrl + a moves the window in +y direction
++!ä:: { ; Shift + Alt + a moves the window in +y direction
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
         win.Move(, moveChange)
+        win.dockedU := false
     }
 }
 
@@ -509,14 +541,9 @@ CycleAllWindows(application) {
 }
 
 ^+N:: {
-    MyGui := Gui(, "Process List")
-    LV := MyGui.Add("ListView", "x2 y0 w400 h500", ["Name"])
-    for app in ComObject('Shell.Application').NameSpace('shell:AppsFolder').Items
-		LV.Add("", app.Name)
-    MyGui.Show()
+   MonitorGetWorkArea(1, &Left, &Top, &Right, &Bottom)
+   WinMove Left, Top, , , "A"
 }
-
-
 
 RunCMDCommand(command) {
     ; Create hidden CMD process

@@ -176,6 +176,7 @@ class WinClass {
             }
         } else {
             WinMove this.prevX, this.prevY, this.prevW, this.prevH, this.hwnd
+            this.state := 'x'
         }
         this.Update(this.prevState)
     }

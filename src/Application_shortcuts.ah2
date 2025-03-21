@@ -22,6 +22,7 @@ class WinClass {
         this.state := 'n'
 
         this.Update()
+	this.SafeData()
 
         this.borderX := this.w - this.actualW
         this.borderY := this.h - this.actualH
@@ -50,8 +51,8 @@ class WinClass {
         ; Keeping the values for coordinates of window in variables to avoid repeated and easy-changable code
         this.left := -this.borderX/2
         this.right := A_ScreenWidth + this.borderX
-        this.top := -this.borderY/2
-        this.bottom := A_ScreenHeight + this.borderY
+        this.top := -this.borderY/2 + 1
+        this.bottom := A_ScreenHeight + this.borderY + 1
         this.middleX := this.left + A_ScreenWidth/2
         this.middleY := this.top + A_ScreenHeight/2
 
@@ -77,11 +78,6 @@ class WinClass {
         this.w := w
         this.h := h
         
-        ; Save previous data
-        this.prevX := this.x
-        this.prevY := this.y
-        this.prevW := this.w
-        this.prevH := this.h
         this.prevState := prevState
 
         WinGetClientPos(&actualX, &actualY, &actualW, &actualH, this.hwnd)
@@ -101,51 +97,52 @@ class WinClass {
         this.dockedU := false
         this.dockedD := false
 
+	this.SafeData()
+
         if vertical = "" {
             if horizontal = "Left" {
                 WinMove this.left, this.top, this.halfscreenwidth, this.screenheight, this.hwnd ; Move to left half
-                this.state := 'l'
                 this.dockedL := true
+		this.state := 'l'
             } else if horizontal = "Right" {
                 WinMove this.middleX, this.top, this.halfscreenwidth, this.screenheight, this.hwnd ; Move to right half
-                this.state := 'r'
                 this.dockedR := true
+		this.state := 'r'
             }
         } else if horizontal = "" {
             if vertical = "Up" {
                 WinMove this.left, this.top, this.screenwidth, this.halfscreenheight, this.hwnd ; Move to top half
-                this.state := 'u'
                 this.dockedU := true
+		this.state := 'u'
             } else if vertical = "Down" {
                 WinMove this.left, this.middleY, this.screenwidth, this.halfscreenheight, this.hwnd ; Move to bottom half
-                this.state := 'd'
                 this.dockedD := true
+		this.state := 'd'
             }
         } else {
             if horizontal = "Left" {
                 if vertical = "Up" { 
                     WinMove this.left, this.top, this.halfscreenwidth, this.halfscreenheight, this.hwnd ; top-left corner
-                    this.state := 'lu'
                     this.dockedL := true
                     this.dockedU := true
+		    this.state := 'lu'
                 } else if vertical = "Down" {
                     WinMove this.left, this.middleY, this.halfscreenwidth, this.halfscreenheight, this.hwnd ; bottom-left corner
-                    this.state := 'ld'
                     this.dockedL := true
                     this.dockedD := true
+		    this.state := 'ld'
                 }
             } else if horizontal = "Right" {
                 if vertical = "Up" {
                     WinMove this.middleX, this.top, this.halfscreenwidth, this.halfscreenheight, this.hwnd ; top-right corner
-
-                    this.state := 'ru'
                     this.dockedR := true
                     this.dockedU := true
+		    this.state := 'ru'
                 } else if vertical = "Down" {
                     WinMove this.middleX, this.middleY, this.halfscreenwidth, this.halfscreenheight, this.hwnd ; bottom-right corner
-                    this.state := 'rd'
                     this.dockedR := true
                     this.dockedD := true
+		    this.state := 'rd'
                 }
             }
         }
@@ -163,8 +160,12 @@ class WinClass {
 
     Maximize() {
 
+
         if this.state != 'm' {
             try { ; Some windows cannot be moved or resized by this command
+
+		this.SafeData()
+
                 WinMove -this.borderX/2, -this.borderY/2, A_ScreenWidth + this.borderX, A_ScreenHeight + this.borderY, this.hwnd
                 this.state := 'm'
 
@@ -176,7 +177,7 @@ class WinClass {
             }
         } else {
             WinMove this.prevX, this.prevY, this.prevW, this.prevH, this.hwnd
-            this.state := 'x'
+            this.state := 'n'
         }
         this.Update(this.prevState)
     }
@@ -236,7 +237,11 @@ class WinClass {
             this.dockedU := false
             this.dockedD := false
         }       
+
+	this.SafeData()
+
         WinMove this.x + changeL, this.y + changeU, this.w + changeR, this.h + changeD, this.hwnd
+
         this.Update()
     }
 
@@ -263,7 +268,10 @@ class WinClass {
             this.dockedD := true
         }
 
+	this.SafeData()
+
         WinMove this.x + changeX, this.y + changeY, this.w, this.h, this.hwnd
+
         this.Update()
     }
 
@@ -274,12 +282,24 @@ class WinClass {
         str := "x: " this.x ", y: " this.y " width: " this.w ", height: " this.h ", r: " this.x + this.w ", b: " this.y + this.h
         str .= "`nminW: " this.minW ", minH: " this.minH
         str .= "`nhwnd: " this.hwnd ", application: " this.application 
+	str .= "`nprevX: " this.prevX ", prevY: " this.prevY ", prevW: " this.prevW ", prevH: " this.prevH
         str .= "`nborderX: " this.borderX ", borderY: " this.borderY ", actualW: " this.actualW ", actualH: " this.actualH 
         str .= "`ndockedL: " this.dockedL ", dockedR: " this.dockedR ", dockedU: " this.dockedU ", dockedD: " this.dockedD
         str .= "`nstate: " this.state
 
         MsgBox str
     }
+
+    SafeData() {
+    	
+	; Save previous data
+        this.prevX := this.x
+        this.prevY := this.y
+        this.prevW := this.w
+        this.prevH := this.h
+
+    }
+
 }
 
 ; --------- Opening/Quiting Applications ---------
@@ -319,12 +339,12 @@ SetTimer CheckAllWindows, 250
 ^<^>!C:: OpenApp "Chromium", "ahk_exe chrome.exe"
 ^<^>!G:: OpenApp "GitHub Desktop"
 ^<^>!M:: OpenApp "OUTLOOK"
-^<^>!E:: OpenApp "explorer"
 ^<^>!V:: OpenApp "Visual Studio Code", "ahk_exe Code.exe"
 ^<^>!W:: OpenApp "WhatsApp"
 ^<^>!N:: OpenApp "OneNote"
 ^<^>!S:: OpenApp "Spotify"
 ^<^>!T:: OpenApp "Terminal", "ahk_exe WindowsTerminal.exe"
+^<^>!E:: OpenApp "File Explorer", "ahk_exe explorer.exe"
 
 OpenApp(appName, processName := "") { ; https:/www.autohotkey.com/boards/viewtopic.php?p=438517#p438517
 

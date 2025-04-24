@@ -319,8 +319,10 @@ CheckAllWindows() { ; Checks if every window is registered
 
     ; Loop through all windows
     for hwnd in hwnds {
-        winInfo := WinGetStyle(hwnd)
-        win := GetWindowObj(hwnd)
+	    try {
+		winInfo := WinGetStyle(hwnd)
+	    }
+	win := GetWindowObj(hwnd)
         if !(win is Winclass) and winInfo & 0x10000000 { ; If the window is not registered and visible
 
             ; Make a new WinClass object for the window
@@ -345,6 +347,7 @@ SetTimer CheckAllWindows, 250
 ^<^>!S:: OpenApp "Spotify"
 ^<^>!T:: OpenApp "Terminal", "ahk_exe WindowsTerminal.exe"
 ^<^>!E:: OpenApp "File Explorer", "ahk_exe explorer.exe"
+^<^>!F:: OpenApp "Firefox", "ahk_exe firefox.exe"
 
 OpenApp(appName, processName := "") { ; https:/www.autohotkey.com/boards/viewtopic.php?p=438517#p438517
 

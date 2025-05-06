@@ -1,8 +1,24 @@
-The .ahk file is written in AutoHotKey v2. This file will be compiled into a .exe file. It is recommended to place the compiled ahk script/.exe file if on Windows 11 in this path: "C:\Users\User\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup" where all the files will be executed at the startup of the computer.
+This script has not been tested on Linux/macOS but only on Windows 11.
 
-The .ah2 file needs to be compiled with the AutoHotKey v2 64-bit compiler in order to interact with the .dll file.
-
-Paths probably need to be changed in the script.
-
+# Shortcuts
 The following hotkeys are provided:
-...
+
+Ctrl + n -> makes a new window of the same application
+Ctrl + q -> quits the active window
+
+The following shortcut is designed to open up applications. The letter corresponds to a associative letter of the application.
+If there already is a window open of the desired application, this window will be opened.
+alt gr + <letter>
+
+The following applications are preconfigured.
+- GitHub Desktop (g)
+- Outlook (m)
+- Visual Studio Code (v)
+- WhatsApp (w)
+- OneNote (n)
+- Spotify (s)
+- Terminal (t)
+- Firefox (f)
+
+# Configuration
+The default settings can be configured by adjusting the source code.

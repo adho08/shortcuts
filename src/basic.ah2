@@ -73,7 +73,6 @@ CheckAllWindows() { ; Checks if every window is registered
 SetTimer CheckAllWindows, 250
 
 ; Ctrl + Alt Gr + <Letter>
-^<^>!C:: OpenApp "Chromium", "ahk_exe chrome.exe"
 ^<^>!G:: OpenApp "GitHub Desktop"
 ^<^>!M:: OpenApp "OUTLOOK"
 ^<^>!V:: OpenApp "Visual Studio Code", "ahk_exe Code.exe"
@@ -81,7 +80,6 @@ SetTimer CheckAllWindows, 250
 ^<^>!N:: OpenApp "OneNote"
 ^<^>!S:: OpenApp "Spotify"
 ^<^>!T:: OpenApp "Terminal", "ahk_exe WindowsTerminal.exe"
-^<^>!E:: OpenApp "File Explorer", "ahk_exe explorer.exe"
 ^<^>!F:: OpenApp "Firefox", "ahk_exe firefox.exe"
 
 OpenApp(appName, processName := "") { ; https:/www.autohotkey.com/boards/viewtopic.php?p=438517#p438517

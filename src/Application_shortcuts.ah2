@@ -552,7 +552,7 @@ hwnd := WinGetID("A")
     hwnd := WinGetID("A")
     win := GetWindowObj(hwnd)
     if win is WinClass {
-        RunWait win.path
+	RunWait win.path
     }
 }
 
